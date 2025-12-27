@@ -1,0 +1,94 @@
+#!/bin/bash
+# Generate limine.conf
+
+efi_memtest="true"
+efi_memtest_file="memtest86+/memtest.efi"
+
+label_latest="true"
+bootpart="2"
+ucode_type="intel"
+ucode_file="intel-ucode.img"
+root_uuid="$(lsblk -f | grep '/$' | awk '{print $4}')"
+cmdline="rw quiet loglevel=3"
+
+limine_folder="/usr/share/limine"
+limine_image="BOOTX64.EFI"
+
+global_conf="timeout: 5
+
+interface_resolution: 1920x1080
+wallpaper: boot():/wallpaper.png
+wallpaper_style: centered
+backdrop: 000000
+
+interface_branding: Limine Bootloader x86_64 UEFI
+interface_branding_color: 6
+
+verbose: no
+graphics: yes
+
+term_background: 44000000
+term_background_bright: 000000
+
+term_foreground: cccccc
+term_foreground_bright: ffffff
+
+term_font_scale: 1x1
+
+editor_enabled: yes
+editor_highlighting: yes
+editor_validation: yes
+
+default_entry: 2
+
+"
+
+kernel_latest="$(for i in /boot/vmlinuz-*; do
+	echo $i | sed 's/^\/boot\/vmlinuz-//' | sed 's/_1$//'
+done | sort | tac | head -n 1)"
+
+gen_linux_entries() {
+	while read kernel_version; do
+		if [[ "$label_latest" = "true" && "$kernel_version" = "$kernel_latest" ]] ; then
+			echo "/Void Linux $kernel_version [latest]"
+			echo "    comment: Void Linux [latest] (kernel version $kernel_version)"
+		else
+			echo "/Void Linux $kernel_version"
+			echo "    comment: Void Linux (kernel version $kernel_version)"
+		fi
+		echo "    protocol: linux"
+		echo "    path: boot($bootpart):/vmlinuz-${kernel_version}_1"
+		echo "    cmdline:root=UUID=$root_uuid $cmdline"
+		if test "$ucode_type" = "intel"; then
+			echo "    module_path: boot($bootpart):/$ucode_file"
+		fi
+		echo "    module_path: boot($bootpart):/initramfs-${kernel_version}_1.img"
+		echo
+	done
+}
+
+gen_all_kernel_entries() {
+	for i in /boot/vmlinuz-*; do
+		echo $i | sed 's/^\/boot\/vmlinuz-//' | sed 's/_1$//'
+	done | tac | gen_linux_entries
+}
+
+gen_limine_conf() {
+	printf "$global_conf"
+	echo
+	if test "$efi_memtest" = "true"; then
+		echo "/UEFI Memory Diagnostics (Memtest86+)"
+		echo "    comment: Advanced UEFI memory diagnostic tool"
+		echo "    protcol: efi"
+		echo "    path: boot($bootpart):/$efi_memtest_file"
+		echo
+	fi
+	gen_all_kernel_entries
+}
+
+if test -n "$(diff -q /efi/EFI/BOOT/$limine_image $limine_folder/$limine_image)" -o ! -e "/efi/EFI/BOOT/$limine_image"; then
+	echo "Updating Limine bootloader image..."
+	cp $limine_folder/$limine_image /efi/EFI/BOOT/$limine_image
+fi
+gen_limine_conf > /efi/limine.conf
+

@@ -1,0 +1,11 @@
+[terminal]
+vt = 7
+switch = true
+
+[general]
+source_profile = true
+
+[default_session]
+# sudoers should be setup to allow _greeter user to run shutdown without password prompt
+command = "tuigreet --user-menu --remember --asterisks --greeting 'Welcome to the Void' --power-shutdown 'sudo /usr/bin/shutdown -P now' --power-reboot 'sudo /usr/bin/shutdown -r now' --time --time-format '%A, %d %B %Y - %T' --window-padding 2 --container-padding 1 --prompt-padding 0 --theme 'border=cyan;prompt=green;input=red' --cmd session-select"
+user = "_greeter"
